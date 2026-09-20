@@ -1,0 +1,80 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AgentCall AI Phone Agent",
+    "version": "1.0.0",
+    "description": "Place a consented AgentCall phone call, ask a short list of questions, and retrieve the structured answers. Use this schema in a custom GPT Action or any AI tool that supports OpenAPI actions."
+  },
+  "servers": [{ "url": "https://YOUR-AGENTCALL-HOST.example" }],
+  "security": [{ "bearerAuth": [] }],
+  "paths": {
+    "/v1/calls": {
+      "post": {
+        "operationId": "startQuestionCall",
+        "summary": "Call a number and ask questions",
+        "description": "The caller must provide the phone number in E.164 format and confirm recording consent. The response is a callId; poll GET /v1/calls/{callId} until status is completed or failed.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StartCallRequest" } } } },
+        "responses": {
+          "202": { "description": "Call queued", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CallStatus" } } } },
+          "400": { "description": "Invalid call request" }
+        }
+      }
+    },
+    "/v1/calls/{callId}": {
+      "get": {
+        "operationId": "getQuestionCall",
+        "summary": "Get call status and answers",
+        "parameters": [{ "$ref": "#/components/parameters/CallId" }],
+        "responses": {
+          "200": { "description": "Current call status, transcript, and answers", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CallStatus" } } } },
+          "404": { "description": "Call not found" }
+        }
+      }
+    },
+    "/v1/calls/{callId}/cancel": {
+      "post": {
+        "operationId": "cancelQuestionCall",
+        "summary": "Cancel an active call",
+        "parameters": [{ "$ref": "#/components/parameters/CallId" }],
+        "responses": { "200": { "description": "Updated call status", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CallStatus" } } } } }
+      }
+    },
+    "/v1/capabilities": {
+      "get": { "operationId": "getAgentCallCapabilities", "summary": "Check AgentCall readiness", "responses": { "200": { "description": "Gateway capabilities" } } }
+    }
+  },
+  "components": {
+    "securitySchemes": { "bearerAuth": { "type": "http", "scheme": "bearer" } },
+    "parameters": { "CallId": { "name": "callId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } } },
+    "schemas": {
+      "StartCallRequest": {
+        "type": "object",
+        "required": ["to", "questions", "recordingConsent", "approved"],
+        "properties": {
+          "to": { "type": "string", "description": "Destination in strict E.164 format, e.g. +14155552671", "pattern": "^\\+[1-9]\\d{5,14}$" },
+          "questions": { "type": "array", "minItems": 1, "maxItems": 12, "items": { "type": "string", "minLength": 1, "maxLength": 500 } },
+          "recordingConsent": { "type": "boolean", "const": true, "description": "Must be true because AgentCall records the conversation." },
+          "context": { "type": "string", "maxLength": 2000 },
+          "callbackUrl": { "type": "string", "format": "uri", "description": "Optional HTTPS endpoint that receives call.completed with the answers." },
+          "approved": { "type": "boolean", "const": true, "description": "Explicit approval to place the call." }
+        }
+      },
+      "CallStatus": {
+        "type": "object",
+        "required": ["callId", "status", "questions"],
+        "properties": {
+          "callId": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "enum": ["queued", "dialing", "asking", "completed", "failed", "cancelled"] },
+          "createdAt": { "type": ["string", "null"], "format": "date-time" },
+          "startedAt": { "type": ["string", "null"], "format": "date-time" },
+          "completedAt": { "type": ["string", "null"], "format": "date-time" },
+          "toLast4": { "type": "string" },
+          "questions": { "type": "array", "items": { "type": "object", "properties": { "index": { "type": "integer" }, "question": { "type": "string" }, "answer": { "type": ["string", "null"] }, "answeredAt": { "type": ["string", "null"], "format": "date-time" } } } },
+          "transcript": { "type": "array", "items": { "type": "object" } },
+          "outcome": { "type": ["string", "null"] },
+          "error": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}
